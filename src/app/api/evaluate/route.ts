@@ -39,9 +39,9 @@ const VALID_TIGER_IDS: readonly TigerId[] = [
  */
 const MODEL_CANDIDATES = [
   "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
+  "gemini-flash-lite-latest",
   "gemini-2.5-flash-lite",
-  "gemini-2.5-flash",
-  "gemini-2.0-flash",
 ] as const;
 
 export interface EvaluateRequestBody {
@@ -80,8 +80,8 @@ async function generateWithFallback(
       },
     });
 
-    // メインモデル（gemini-3.5-flash-lite）は一時的なスパイク対策として最大2回試行
-    const maxAttempts = i === 0 ? 2 : 1;
+    // 503等の高負荷時は待たずに即座に次の軽量モデル（gemini-3.1-flash-lite等）へフォールバック
+    const maxAttempts = 1;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
