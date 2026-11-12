@@ -33,6 +33,17 @@ const VALID_TIGER_IDS: readonly TigerId[] = [
   "strategist",
 ];
 
+/**
+ * メインモデル（gemini-3.5-flash-lite）が503等の高負荷エラーを返した場合に
+ * 自動でフォールバックするモデル優先順位リスト
+ */
+const MODEL_CANDIDATES = [
+  "gemini-3.5-flash-lite",
+  "gemini-2.5-flash-lite",
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
+] as const;
+
 export interface EvaluateRequestBody {
   idea: string;
   chatHistory: ChatMessage[];
@@ -47,6 +58,49 @@ export interface RawTigerEvaluation {
 export interface EvaluateResponseData {
   evaluations: RawTigerEvaluation[];
   nemesis: TigerId;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function generateWithFallback(
+  genAI: GoogleGenerativeAI,
+  prompt: string
+): Promise<string> {
+  let lastError: unknown = null;
+
+  for (let i = 0; i < MODEL_CANDIDATES.length; i++) {
+    const modelName = MODEL_CANDIDATES[i];
+    const model = genAI.getGenerativeModel({
+      model: modelName,
+      systemInstruction: SYSTEM_INSTRUCTION,
+      generationConfig: {
+        responseMimeType: "application/json",
+      },
+    });
+
+    // メインモデル（gemini-3.5-flash-lite）は一時的なスパイク対策として最大2回試行
+    const maxAttempts = i === 0 ? 2 : 1;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const result = await model.generateContent(prompt);
+        return result.response.text();
+      } catch (err) {
+        lastError = err;
+        console.warn(
+          `[POST /api/evaluate] Model ${modelName} (attempt ${attempt}/${maxAttempts}) failed:`,
+          err instanceof Error ? err.message : err
+        );
+        if (attempt < maxAttempts) {
+          await sleep(600);
+        }
+      }
+    }
+  }
+
+  throw lastError ?? new Error("すべてのAIモデルへのリクエストが失敗しました。");
 }
 
 export async function POST(req: NextRequest) {
@@ -74,13 +128,6 @@ export async function POST(req: NextRequest) {
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: "gemini-3.5-flash-lite",
-      systemInstruction: SYSTEM_INSTRUCTION,
-      generationConfig: {
-        responseMimeType: "application/json",
-      },
-    });
 
     // 会話履歴をテキスト整形してプロンプトに付与
     const formattedHistory =
@@ -103,8 +150,7 @@ ${formattedHistory}
 
 上記の事業アイデアと最新の交渉状況を踏まえ、5人の虎それぞれの視点から評価スコア（0〜20の整数）と辛辣なコメント、および宿敵（nemesis）を指定のJSON形式で出力してください。`;
 
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
+    const responseText = await generateWithFallback(genAI, prompt);
 
     let parsed: Partial<EvaluateResponseData>;
     try {

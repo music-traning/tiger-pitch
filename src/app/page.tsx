@@ -41,6 +41,12 @@ export default function TigerPitchPage() {
   const [initialIdea, setInitialIdea] = useState("");
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [lastFailedRequest, setLastFailedRequest] = useState<{
+    text: string;
+    idea: string;
+    history: ChatMessage[];
+    isFirstTurn: boolean;
+  } | null>(null);
   const [showDevTools, setShowDevTools] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
 
@@ -76,6 +82,7 @@ export default function TigerPitchPage() {
 
   // バックエンド (/api/evaluate) を呼び出して5人の虎のAI評価を取得・反映
   const requestAiEvaluation = async (
+    userText: string,
     ideaText: string,
     updatedHistory: ChatMessage[],
     isFirstTurn: boolean
@@ -101,6 +108,9 @@ export default function TigerPitchPage() {
         throw new Error(data.error || `API Error (${res.status})`);
       }
 
+      // 成功時は失敗キャッシュをクリア
+      setLastFailedRequest(null);
+
       // 0〜20点のスコアを1点=100万円（最大2,000万円/人）の出資額に換算
       const evaluations = data.evaluations.map((item) => ({
         tigerId: item.id,
@@ -119,9 +129,35 @@ export default function TigerPitchPage() {
           ? err.message
           : "AI評価の取得中にエラーが発生しました。";
       setApiError(msg);
+      setLastFailedRequest({
+        text: userText,
+        idea: ideaText,
+        history: updatedHistory,
+        isFirstTurn,
+      });
     } finally {
       setIsEvaluating(false);
     }
+  };
+
+  // ワンタップ再査定（ターン消費なし・打ち直し不要）
+  const handleRetryEvaluation = async () => {
+    if (!lastFailedRequest || isEvaluating) return;
+    await requestAiEvaluation(
+      lastFailedRequest.text,
+      lastFailedRequest.idea,
+      lastFailedRequest.history,
+      lastFailedRequest.isFirstTurn
+    );
+  };
+
+  // 直前の発言を取り消して入力欄へ文章を復元する（ターンも1つ戻す）
+  const handleRollbackToInput = () => {
+    if (!lastFailedRequest || isEvaluating) return;
+    actions.rollbackLastUserMessage();
+    setInputText(lastFailedRequest.text);
+    setApiError(null);
+    setLastFailedRequest(null);
   };
 
   // ピッチ開始または反論送信の共通処理
@@ -132,7 +168,18 @@ export default function TigerPitchPage() {
     // ユーザー操作タイミングでAudioContextをアンロック・resume
     initAudio();
 
-    const isFirstTurn = state.gameStatus === "idle";
+    // 万が一前回のエラー状態のまま新しく送信された場合は、前回の未評価発言をロールバックしてから送信
+    const wasFailedFirstTurn = lastFailedRequest?.isFirstTurn ?? false;
+    const baseHistory = lastFailedRequest
+      ? state.chatHistory.slice(0, -1)
+      : state.chatHistory;
+    if (lastFailedRequest) {
+      actions.rollbackLastUserMessage();
+      setLastFailedRequest(null);
+    }
+
+    const isFirstTurn =
+      state.gameStatus === "idle" || wasFailedFirstTurn || baseHistory.length === 0;
     const currentIdea = isFirstTurn ? trimmed : initialIdea || trimmed;
 
     const userMsg: ChatMessage = {
@@ -141,9 +188,7 @@ export default function TigerPitchPage() {
       message: trimmed,
     };
 
-    const nextHistory = isFirstTurn
-      ? [userMsg]
-      : [...state.chatHistory, userMsg];
+    const nextHistory = isFirstTurn ? [userMsg] : [...baseHistory, userMsg];
 
     if (isFirstTurn) {
       setInitialIdea(trimmed);
@@ -153,7 +198,7 @@ export default function TigerPitchPage() {
     }
 
     setInputText("");
-    await requestAiEvaluation(currentIdea, nextHistory, isFirstTurn);
+    await requestAiEvaluation(trimmed, currentIdea, nextHistory, isFirstTurn);
   };
 
   // メッセージ送信ハンドラ
@@ -257,6 +302,7 @@ export default function TigerPitchPage() {
     setInitialIdea("");
     setInputText("");
     setApiError(null);
+    setLastFailedRequest(null);
     setRankingError(null);
   };
 
@@ -916,11 +962,41 @@ export default function TigerPitchPage() {
                 </div>
               )}
 
-              {/* APIエラー表示 */}
+              {/* APIエラー表示 & ワンタップ再試行 / 入力欄復元ボタン */}
               {apiError && (
-                <div className="p-3 rounded-xl bg-red-950/70 border border-red-800 text-xs text-red-300 space-y-1">
-                  <div className="font-bold text-red-400">API通信エラー</div>
-                  <div>{apiError}</div>
+                <div className="p-3.5 rounded-xl bg-red-950/75 border border-red-800 text-xs text-red-200 space-y-3 shadow-lg">
+                  <div className="space-y-1">
+                    <div className="font-bold text-red-400 flex items-center gap-1.5">
+                      <ShieldAlert className="w-4 h-4 shrink-0" />
+                      <span>AIサーバーが一時的に混雑しています</span>
+                    </div>
+                    <div className="text-[11px] text-red-300/90 break-words leading-relaxed">
+                      {apiError}
+                    </div>
+                  </div>
+
+                  {lastFailedRequest && (
+                    <div className="flex flex-col gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => void handleRetryEvaluation()}
+                        disabled={isEvaluating}
+                        className="w-full flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-bold text-xs transition shadow cursor-pointer disabled:opacity-50"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>同じ内容でもう一度査定する（ターン消費なし）</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleRollbackToInput}
+                        disabled={isEvaluating}
+                        className="w-full py-2 px-3 rounded-lg bg-gray-900/90 hover:bg-gray-800 text-gray-300 border border-red-800/60 font-medium text-[11px] transition cursor-pointer disabled:opacity-50"
+                      >
+                        発言を取り消して入力欄に戻す（編集し直す）
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 

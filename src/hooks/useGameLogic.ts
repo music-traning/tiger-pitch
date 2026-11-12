@@ -135,6 +135,9 @@ export type GameAction =
       type: "CLOSE_DEAL";
     }
   | {
+      type: "ROLLBACK_LAST_USER_MESSAGE";
+    }
+  | {
       type: "RESET_GAME";
     };
 
@@ -353,6 +356,32 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       };
     }
 
+    case "ROLLBACK_LAST_USER_MESSAGE": {
+      if (state.chatHistory.length === 0) {
+        return state;
+      }
+      const lastMsg = state.chatHistory[state.chatHistory.length - 1];
+      if (lastMsg?.role !== "user") {
+        return state;
+      }
+
+      const nextHistory = state.chatHistory.slice(0, -1);
+      const nextTurn = Math.max(0, state.currentTurn - 1);
+
+      if (nextHistory.length === 0 || nextTurn === 0) {
+        return {
+          ...INITIAL_STATE,
+          tigerScores: { ...INITIAL_TIGER_SCORES },
+        };
+      }
+
+      return {
+        ...state,
+        currentTurn: nextTurn,
+        chatHistory: nextHistory,
+      };
+    }
+
     case "RESET_GAME": {
       return {
         ...INITIAL_STATE,
@@ -493,6 +522,11 @@ export function useGameLogic() {
     dispatch({ type: "CLOSE_DEAL" });
   }, []);
 
+  /** APIエラー時などに直前のユーザー発言とターン消費を取り消す */
+  const rollbackLastUserMessage = useCallback(() => {
+    dispatch({ type: "ROLLBACK_LAST_USER_MESSAGE" });
+  }, []);
+
   /** ゲーム状態を初期値にリセット（デバッグ・再プレイ用） */
   const resetGame = useCallback(() => {
     dispatch({ type: "RESET_GAME" });
@@ -511,6 +545,7 @@ export function useGameLogic() {
       receiveEvaluations,
       triggerGameOver,
       closeDeal,
+      rollbackLastUserMessage,
       resetGame,
     },
   };
