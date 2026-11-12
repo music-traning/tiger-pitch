@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://tiger-pitch.vercel.app"),
   title: "TIGER PITCH - AI投資家交渉ゲーム",
   description:
     "5人のAI投資家（虎）と交渉し、1億円の出資を目指すピッチバトルゲーム",
@@ -13,6 +15,7 @@ export const metadata: Metadata = {
     title: "TIGER PITCH - AI投資家交渉ゲーム",
     description:
       "5人のAI投資家（虎）と交渉し、1億円の出資を目指すピッチバトルゲーム",
+    url: "https://tiger-pitch.vercel.app",
     siteName: "TIGER PITCH - Universal Make Associates",
     images: [
       {
@@ -43,6 +46,7 @@ export default function RootLayout({
     <html lang="ja">
       <body className="antialiased bg-neutral-950 text-neutral-100">
         {children}
+        <Analytics />
       </body>
     </html>
   );

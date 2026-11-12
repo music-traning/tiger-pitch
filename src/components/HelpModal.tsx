@@ -24,11 +24,11 @@ export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md max-h-[85vh] flex flex-col bg-gray-900 border border-gray-700/80 rounded-2xl shadow-2xl overflow-hidden"
+        className="w-full max-w-md max-h-[88dvh] flex flex-col bg-gray-900 border border-gray-700/80 rounded-2xl shadow-2xl overflow-hidden my-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* モーダルヘッダー */}
@@ -49,8 +49,8 @@ export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
           </button>
         </div>
 
-        {/* モーダル本文（スクロール領域） */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-5 text-xs text-gray-300 leading-relaxed">
+        {/* モーダル本文（スクロール領域: min-h-0 と明示的な max-h で確実にスクロール可能にする） */}
+        <div className="flex-1 min-h-0 max-h-[calc(88dvh-7.5rem)] overflow-y-auto overscroll-contain p-4 space-y-5 text-xs text-gray-300 leading-relaxed">
           {/* 1. ゲームの目的 */}
           <section className="space-y-1.5">
             <div className="flex items-center gap-1.5 font-bold text-green-400 text-xs">
