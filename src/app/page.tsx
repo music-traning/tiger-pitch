@@ -14,6 +14,7 @@ import {
   Loader2,
   Trophy,
   Crown,
+  CircleHelp,
 } from "lucide-react";
 import {
   useGameLogic,
@@ -21,6 +22,7 @@ import {
   type ChatMessage,
 } from "@/hooks/useGameLogic";
 import TypewriterText from "@/components/TypewriterText";
+import HelpModal from "@/components/HelpModal";
 import { initAudio } from "@/utils/audio";
 import type { EvaluateResponseData } from "@/app/api/evaluate/route";
 import type { RankingRecord } from "@/utils/supabase";
@@ -33,6 +35,7 @@ export default function TigerPitchPage() {
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [showDevTools, setShowDevTools] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false);
 
   // Phase 4: ランキング登録＆リーダーボード表示用State
   const [playerName, setPlayerName] = useState("");
@@ -550,8 +553,8 @@ export default function TigerPitchPage() {
               )}
             </main>
 
-            {/* リーダーボード下部固定フッター: 再挑戦ボタン */}
-            <footer className="sticky bottom-0 z-20 bg-gray-900 border-t border-gray-800 p-3 shrink-0">
+            {/* リーダーボード下部固定フッター: 再挑戦ボタン & クレジット */}
+            <footer className="sticky bottom-0 z-20 bg-gray-900 border-t border-gray-800 px-3 pt-3 pb-2 space-y-2 shrink-0">
               <button
                 type="button"
                 onClick={handleRestartGame}
@@ -560,6 +563,16 @@ export default function TigerPitchPage() {
                 <RotateCcw className="w-4 h-4" />
                 <span>新しいアイデアで再挑戦する</span>
               </button>
+              <div className="text-center">
+                <a
+                  href="https://note.com/jazzy_begin"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[10px] font-mono text-gray-500 hover:text-gray-300 transition"
+                >
+                  ©2026 buro
+                </a>
+              </div>
             </footer>
           </div>
         ) : (
@@ -601,6 +614,15 @@ export default function TigerPitchPage() {
                   </div>
 
                   <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setShowHelpModal(true)}
+                      className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-800/90 hover:bg-gray-700 text-green-400 hover:text-green-300 border border-gray-700/80 transition cursor-pointer font-bold text-xs"
+                      title="ゲームのルール・ヘルプを見る"
+                      aria-label="ヘルプ"
+                    >
+                      ?
+                    </button>
                     <button
                       type="button"
                       onClick={() => void fetchAndOpenLeaderboard()}
@@ -753,18 +775,28 @@ export default function TigerPitchPage() {
                       下のフォームから最初のビジネスプラン（ピッチ）を送信して交渉を開始してください。右上アイコンから査定シミュレーションも可能です。
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void sendPitchOrReply(
-                        "AIとIoTを活用した次世代型スマートサウナ事業を提案します！"
-                      )
-                    }
-                    disabled={isEvaluating}
-                    className="px-4 py-2 rounded-lg bg-gray-900 hover:bg-gray-800 text-xs font-mono text-green-400 border border-gray-800 transition cursor-pointer disabled:opacity-50"
-                  >
-                    サンプルピッチで即座に開始 →
-                  </button>
+                  <div className="flex items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void sendPitchOrReply(
+                          "AIとIoTを活用した次世代型スマートサウナ事業を提案します！"
+                        )
+                      }
+                      disabled={isEvaluating}
+                      className="px-4 py-2 rounded-lg bg-gray-900 hover:bg-gray-800 text-xs font-mono text-green-400 border border-gray-800 transition cursor-pointer disabled:opacity-50"
+                    >
+                      サンプルピッチで即座に開始 →
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowHelpModal(true)}
+                      className="flex items-center gap-1 px-3 py-2 rounded-lg bg-gray-900 hover:bg-gray-800 text-xs font-mono text-gray-300 border border-gray-800 transition cursor-pointer"
+                    >
+                      <CircleHelp className="w-3.5 h-3.5 text-green-400" />
+                      <span>ルールを見る</span>
+                    </button>
+                  </div>
                 </div>
               ) : (
                 state.chatHistory.map((item) => {
@@ -858,7 +890,7 @@ export default function TigerPitchPage() {
             {/* ==========================================
                 C. フッター（Sticky Bottom）
             ========================================== */}
-            <footer className="sticky bottom-0 z-20 bg-gray-900 border-t border-gray-800 p-3 shrink-0">
+            <footer className="sticky bottom-0 z-20 bg-gray-900 border-t border-gray-800 px-3 pt-3 pb-2 space-y-2 shrink-0">
               <form onSubmit={handleSubmit} className="flex items-center gap-2">
                 {/* ディール成立ボタン（左側・アウトライン警告色・CLOSE_DEAL発火） */}
                 <button
@@ -904,6 +936,17 @@ export default function TigerPitchPage() {
                   )}
                 </button>
               </form>
+
+              <div className="text-center">
+                <a
+                  href="https://note.com/jazzy_begin"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[10px] font-mono text-gray-500 hover:text-gray-300 transition"
+                >
+                  ©2026 buro
+                </a>
+              </div>
             </footer>
 
             {/* ==========================================
@@ -1083,6 +1126,12 @@ export default function TigerPitchPage() {
             )}
           </>
         )}
+
+        {/* ゲームルール・ヘルプモーダル */}
+        <HelpModal
+          isOpen={showHelpModal}
+          onClose={() => setShowHelpModal(false)}
+        />
       </div>
     </div>
   );

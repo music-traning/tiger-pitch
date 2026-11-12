@@ -320,10 +320,18 @@ export default async function ResultDetailPage({ params }: ResultPageProps) {
             <span>トップへ戻る（新しいアイデアで再挑戦）</span>
           </Link>
 
-          <div className="text-center pt-1">
+          <div className="text-center pt-1 flex items-center justify-center gap-3">
             <span className="font-mono text-[10px] tracking-widest text-gray-500">
               Powered by Universal Make Associates
             </span>
+            <a
+              href="https://note.com/jazzy_begin"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-[10px] text-gray-400 hover:text-gray-200 transition"
+            >
+              ©2026 buro
+            </a>
           </div>
         </footer>
       </div>
