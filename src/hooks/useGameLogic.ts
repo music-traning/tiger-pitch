@@ -9,7 +9,7 @@ import {
   Feather,
   type LucideIcon,
 } from "lucide-react";
-import { initAudio, playDamageSound } from "@/utils/audio";
+import { initAudio, playDamageSound, playSuccessSound } from "@/utils/audio";
 
 // ==========================================
 // 1. 型定義 (Types)
@@ -43,6 +43,10 @@ export interface GameState {
   nemesis: TigerId | null;
   /** ユーザーが最初に提案した事業アイデアの要約 */
   ideaSummary: string;
+  /** 現在のターン数（初期値: 0, 初回ピッチで1） */
+  currentTurn: number;
+  /** 最大ターン数（定数: 5） */
+  maxTurns: number;
   /** ゲーム進行状態 */
   gameStatus: GameStatus;
 }
@@ -68,6 +72,7 @@ export interface TigerEvaluationInput {
 export const MAX_TOTAL_VALUATION = 100_000_000; // 最大合計1億円
 export const MAX_TIGER_VALUATION = 20_000_000; // 虎1人あたりの基準上限（2,000万円 × 5人 = 1億円）
 export const INITIAL_MENTAL_HP = 100;
+export const MAX_TURNS = 5; // 最大5ターン制限
 
 /** 5人の虎のマスターデータ */
 export const TIGERS: readonly TigerMaster[] = [
@@ -93,6 +98,8 @@ export const INITIAL_STATE: GameState = {
   tigerScores: { ...INITIAL_TIGER_SCORES },
   nemesis: null,
   ideaSummary: "",
+  currentTurn: 0,
+  maxTurns: MAX_TURNS,
   gameStatus: "idle",
 };
 
@@ -175,6 +182,51 @@ function calculateMentalDamage(
   return totalDamage;
 }
 
+/**
+ * 5人の評価コメントからタイムラインに表示する最大3名を選出する
+ * 1. 現在の nemesis（宿敵）のコメントは絶対に追加
+ * 2. 残りの虎から「前回からのスコア変動幅（絶対値）」が最も大きかった上位2名を選出
+ */
+function selectTopThreeEvaluations(
+  evaluations: TigerEvaluationInput[],
+  prevScores: TigerScores,
+  nemesis: TigerId | null
+): TigerEvaluationInput[] {
+  const validEvals = evaluations.filter((item) => item.message.trim() !== "");
+  if (validEvals.length <= 3) {
+    return validEvals;
+  }
+
+  const selectedIds = new Set<TigerId>();
+
+  // 1. 宿敵を最優先で確保
+  if (nemesis && validEvals.some((e) => e.tigerId === nemesis)) {
+    selectedIds.add(nemesis);
+  }
+
+  // 2. 残りの虎をスコア変動幅（絶対値）の降順でソートして上位を選出
+  const remaining = validEvals
+    .filter((e) => !selectedIds.has(e.tigerId))
+    .map((e) => {
+      const prev = prevScores[e.tigerId] ?? 0;
+      const next = Math.max(0, e.newScore);
+      const absDiff = Math.abs(next - prev);
+      return { item: e, absDiff, next };
+    })
+    .sort((a, b) => {
+      if (b.absDiff !== a.absDiff) return b.absDiff - a.absDiff;
+      return b.next - a.next;
+    });
+
+  for (const entry of remaining) {
+    if (selectedIds.size >= 3) break;
+    selectedIds.add(entry.item.tigerId);
+  }
+
+  // 元の順序を維持して最大3名分を返却
+  return validEvals.filter((e) => selectedIds.has(e.tigerId));
+}
+
 // ==========================================
 // 5. Reducer 実装
 // ==========================================
@@ -202,6 +254,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         gameStatus: "playing",
         nemesis: selectedNemesis,
         ideaSummary: pitchText,
+        currentTurn: 1,
+        maxTurns: MAX_TURNS,
         chatHistory: [initialMessage],
       };
     }
@@ -219,6 +273,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
       return {
         ...state,
+        currentTurn: Math.min(state.maxTurns, state.currentTurn + 1),
         chatHistory: [...state.chatHistory, newMessage],
       };
     }
@@ -228,24 +283,29 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         return state;
       }
 
+      const nextNemesis = action.payload.nemesis ?? state.nemesis;
       const nextScores: TigerScores = { ...state.tigerScores };
-      const newMessages: ChatMessage[] = [];
 
+      // 1. 5人全員分の出資額スコア変動はすべて反映する
       action.payload.evaluations.forEach((evalItem) => {
         const clampedScore = Math.max(0, evalItem.newScore);
         nextScores[evalItem.tigerId] = clampedScore;
-
-        if (evalItem.message.trim() !== "") {
-          newMessages.push({
-            id: createMessageId(`tiger-${evalItem.tigerId}`),
-            role: "tiger",
-            tigerId: evalItem.tigerId,
-            message: evalItem.message,
-          });
-        }
       });
 
-      const nextNemesis = action.payload.nemesis ?? state.nemesis;
+      // 2. チャット履歴に表示する発言者を最大3名（宿敵 + 変動幅上位2名）に絞り込む
+      const filteredEvaluations = selectTopThreeEvaluations(
+        action.payload.evaluations,
+        state.tigerScores,
+        nextNemesis
+      );
+
+      const newMessages: ChatMessage[] = filteredEvaluations.map((evalItem) => ({
+        id: createMessageId(`tiger-${evalItem.tigerId}`),
+        role: "tiger",
+        tigerId: evalItem.tigerId,
+        message: evalItem.message,
+      }));
+
       const nextTotalValuation = calculateTotalValuation(nextScores);
       const damage = calculateMentalDamage(
         state.tigerScores,
@@ -254,6 +314,16 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       );
       const nextMentalHp = Math.max(0, state.mentalHp - damage);
 
+      // 3. 終了判定:
+      // - メンタルHPが0以下なら gameover（破産）
+      // - 最終ターン（currentTurn >= maxTurns）の評価完了時は自動的に deal_closed（ディール強制成立）
+      let nextGameStatus: GameStatus = state.gameStatus;
+      if (nextMentalHp <= 0) {
+        nextGameStatus = "gameover";
+      } else if (state.currentTurn >= state.maxTurns) {
+        nextGameStatus = "deal_closed";
+      }
+
       return {
         ...state,
         nemesis: nextNemesis,
@@ -261,8 +331,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         totalValuation: nextTotalValuation,
         chatHistory: [...state.chatHistory, ...newMessages],
         mentalHp: nextMentalHp,
-        // メンタルHPが0以下になった場合は自動的にgameoverへ遷移
-        gameStatus: nextMentalHp <= 0 ? "gameover" : state.gameStatus,
+        gameStatus: nextGameStatus,
       };
     }
 
@@ -303,7 +372,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 export function useGameLogic() {
   const [state, dispatch] = useReducer(gameReducer, INITIAL_STATE);
   const [isTakingDamage, setIsTakingDamage] = useState(false);
+  const [isValuationUp, setIsValuationUp] = useState(false);
+  const [tigerDeltas, setTigerDeltas] = useState<TigerScores>({
+    ...INITIAL_TIGER_SCORES,
+  });
+
   const prevMentalHpRef = useRef<number>(state.mentalHp);
+  const prevTotalValuationRef = useRef<number>(state.totalValuation);
+  const prevTigerScoresRef = useRef<TigerScores>({ ...state.tigerScores });
 
   // メンタルHPの減少を監視し、ダメージ演出フラグ（isTakingDamage）を400ms間ONにする＆ダメージSE再生
   useEffect(() => {
@@ -321,6 +397,60 @@ export function useGameLogic() {
     setIsTakingDamage(false);
     prevMentalHpRef.current = state.mentalHp;
   }, [state.mentalHp]);
+
+  // 合計評価額（totalValuation）および個別スコアの上昇を監視し、ポジティブ演出（チャリンSE・緑発光・+¥バッジ）を発火
+  useEffect(() => {
+    const prevTotal = prevTotalValuationRef.current;
+    const prevScores = prevTigerScoresRef.current;
+
+    // リセット時やゲーム開始時（0に戻った時）
+    if (state.gameStatus === "idle" || state.chatHistory.length <= 1) {
+      setIsValuationUp(false);
+      setTigerDeltas({ ...INITIAL_TIGER_SCORES });
+      prevTotalValuationRef.current = state.totalValuation;
+      prevTigerScoresRef.current = { ...state.tigerScores };
+      return;
+    }
+
+    // 各虎の前回比プラス幅を計算
+    const newDeltas: TigerScores = { ...INITIAL_TIGER_SCORES };
+    let hasAnyPositiveDelta = false;
+    (Object.keys(state.tigerScores) as TigerId[]).forEach((tigerId) => {
+      const diff = state.tigerScores[tigerId] - (prevScores[tigerId] ?? 0);
+      if (diff > 0) {
+        newDeltas[tigerId] = diff;
+        hasAnyPositiveDelta = true;
+      }
+    });
+
+    const isTotalIncreased = state.totalValuation > prevTotal;
+
+    prevTotalValuationRef.current = state.totalValuation;
+    prevTigerScoresRef.current = { ...state.tigerScores };
+
+    if (isTotalIncreased || hasAnyPositiveDelta) {
+      if (isTotalIncreased) {
+        setIsValuationUp(true);
+        playSuccessSound();
+      }
+      if (hasAnyPositiveDelta) {
+        setTigerDeltas(newDeltas);
+      }
+
+      const flashTimer = setTimeout(() => {
+        setIsValuationUp(false);
+      }, 500);
+
+      const deltaTimer = setTimeout(() => {
+        setTigerDeltas({ ...INITIAL_TIGER_SCORES });
+      }, 1500);
+
+      return () => {
+        clearTimeout(flashTimer);
+        clearTimeout(deltaTimer);
+      };
+    }
+  }, [state.totalValuation, state.tigerScores, state.gameStatus, state.chatHistory.length]);
 
   /** ゲーム開始（初回ピッチ送信） */
   const startGame = useCallback(
@@ -373,6 +503,8 @@ export function useGameLogic() {
     dispatch,
     tigers: TIGERS,
     isTakingDamage,
+    isValuationUp,
+    tigerDeltas,
     actions: {
       startGame,
       addUserMessage,

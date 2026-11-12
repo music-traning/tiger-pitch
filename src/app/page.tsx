@@ -29,7 +29,14 @@ import type { RankingRecord } from "@/utils/supabase";
 
 export default function TigerPitchPage() {
   const router = useRouter();
-  const { state, tigers, isTakingDamage, actions } = useGameLogic();
+  const {
+    state,
+    tigers,
+    isTakingDamage,
+    isValuationUp,
+    tigerDeltas,
+    actions,
+  } = useGameLogic();
   const [inputText, setInputText] = useState("");
   const [initialIdea, setInitialIdea] = useState("");
   const [isEvaluating, setIsEvaluating] = useState(false);
@@ -396,6 +403,13 @@ export default function TigerPitchPage() {
         }`}
       />
 
+      {/* 評価額アップ時の全画面グリーンフラッシュ演出オーバーレイ */}
+      <div
+        className={`fixed inset-0 pointer-events-none z-50 ${
+          isValuationUp ? "animate-flashGreen" : ""
+        }`}
+      />
+
       {/* ルートコンテナ: スマホサイズ固定 & 3分割フレックスレイアウト */}
       <div className="max-w-md mx-auto h-screen flex flex-col bg-gray-950 border-x border-gray-800/80 shadow-2xl relative overflow-hidden">
         {showLeaderboard ? (
@@ -596,21 +610,34 @@ export default function TigerPitchPage() {
               </div>
 
               <div className="px-4 pt-3 pb-3 space-y-3">
-                {/* ステータス上部バー: Mental HP 数値 & ランキング / Dev トグル */}
+                {/* ステータス上部バー: Mental HP 数値 & ターン数 & ランキング / Dev トグル */}
                 <div className="flex items-center justify-between text-[11px] font-mono">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-gray-400 uppercase tracking-wider">
-                      MENTAL HP
-                    </span>
-                    <span
-                      className={`font-bold px-1.5 py-0.5 rounded ${
-                        isCriticalHp
-                          ? "bg-red-950/80 text-red-400 border border-red-800/60 animate-pulse"
-                          : "bg-gray-800 text-emerald-400"
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
+                      <span className="text-gray-400 uppercase tracking-wider">
+                        HP
+                      </span>
+                      <span
+                        className={`font-bold px-1.5 py-0.5 rounded ${
+                          isCriticalHp
+                            ? "bg-red-950/80 text-red-400 border border-red-800/60 animate-pulse"
+                            : "bg-gray-800 text-emerald-400"
+                        }`}
+                      >
+                        {state.mentalHp}%
+                      </span>
+                    </div>
+
+                    {/* 現在のターン表示（最終ターン 5/5 は赤文字＆点滅でプレッシャー付与） */}
+                    <div
+                      className={`px-1.5 py-0.5 rounded border text-[10px] font-bold ${
+                        state.currentTurn >= state.maxTurns
+                          ? "bg-red-950/80 text-red-400 border-red-700/80 animate-pulse"
+                          : "bg-gray-800/90 text-gray-300 border-gray-700/70"
                       }`}
                     >
-                      {state.mentalHp}%
-                    </span>
+                      現在のターン: {state.currentTurn} / {state.maxTurns}
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-1.5">
@@ -700,25 +727,38 @@ export default function TigerPitchPage() {
                   </div>
                 </div>
 
-                {/* 3. 審査員ステータス（5人の虎アイコン横並び + 個別出資額 + 宿敵エフェクト） */}
-                <div className="grid grid-cols-5 gap-1.5 pt-0.5">
+                {/* 3. 審査員ステータス（5人の虎アイコン横並び + 個別出資額 + 宿敵エフェクト + 増額ポップアップ） */}
+                <div className="grid grid-cols-5 gap-1.5 pt-1">
                   {tigers.map((tiger) => {
                     const IconComponent = tiger.icon;
                     const isNemesis = state.nemesis === tiger.id;
                     const score = state.tigerScores[tiger.id];
+                    const delta = tigerDeltas[tiger.id] ?? 0;
 
                     return (
                       <div
                         key={tiger.id}
-                        className={`flex flex-col items-center justify-between p-1.5 rounded-lg border transition-all ${
+                        className={`relative flex flex-col items-center justify-between p-1.5 rounded-lg border transition-all ${
                           isNemesis
                             ? "border-red-500 bg-red-950/30 shadow-[0_0_12px_rgba(239,68,68,0.35)] animate-pulse"
+                            : delta > 0
+                            ? "border-green-500/80 bg-green-950/25 shadow-[0_0_12px_rgba(34,197,94,0.3)]"
                             : "border-gray-800 bg-gray-950/50"
                         }`}
                         title={`${tiger.name}${
                           isNemesis ? " (宿敵 / NEMESIS)" : ""
                         }`}
                       >
+                        {/* 出資額UP時のフロートアップ緑バッジ演出 */}
+                        {delta > 0 && (
+                          <div
+                            key={`${tiger.id}-${score}`}
+                            className="pointer-events-none absolute -top-3.5 left-1/2 -translate-x-1/2 z-30 px-1.5 py-0.5 rounded-full bg-green-500 text-gray-950 font-mono text-[9px] font-extrabold whitespace-nowrap shadow-[0_0_10px_rgba(34,197,94,0.8)] animate-floatUp"
+                          >
+                            +¥{delta.toLocaleString("ja-JP")}
+                          </div>
+                        )}
+
                         <div className="relative flex items-center justify-center w-8 h-8 rounded-full bg-gray-900 border border-gray-700/80 mb-1">
                           <IconComponent
                             className={`w-4 h-4 ${

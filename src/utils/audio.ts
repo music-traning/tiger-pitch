@@ -132,3 +132,62 @@ export function playTypingSound(): void {
     // AudioContext未許可環境等での例外を安全に無視
   }
 }
+
+/**
+ * 評価額アップ時のポジティブ効果音（チャリン！という高音コインチャイム）を再生
+ * - 1000Hz〜2000Hz帯の2音アルペジオ（B5 → E6）を素早く鳴らしてフェードアウト
+ */
+export function playSuccessSound(): void {
+  const ctx = initAudio();
+  if (!ctx) return;
+
+  try {
+    const now = ctx.currentTime;
+
+    // 1音目: 1174.66Hz (D6) -> 2音目: 1567.98Hz (G6) のキラッとしたコイン音
+    const notes = [
+      { freq: 1174.66, startOffset: 0, duration: 0.12 },
+      { freq: 1567.98, startOffset: 0.055, duration: 0.24 },
+    ];
+
+    notes.forEach(({ freq, startOffset, duration }) => {
+      const startTime = now + startOffset;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, startTime);
+
+      gain.gain.setValueAtTime(0.18, startTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(startTime);
+      osc.stop(startTime + duration);
+
+      // 倍音成分（triangle波）を薄く重ねて金属的な響きを付与
+      const harmonicOsc = ctx.createOscillator();
+      const harmonicGain = ctx.createGain();
+
+      harmonicOsc.type = "triangle";
+      harmonicOsc.frequency.setValueAtTime(freq * 2, startTime);
+
+      harmonicGain.gain.setValueAtTime(0.06, startTime);
+      harmonicGain.gain.exponentialRampToValueAtTime(
+        0.0005,
+        startTime + duration * 0.8
+      );
+
+      harmonicOsc.connect(harmonicGain);
+      harmonicGain.connect(ctx.destination);
+
+      harmonicOsc.start(startTime);
+      harmonicOsc.stop(startTime + duration);
+    });
+  } catch {
+    // AudioContext未許可環境等での例外を安全に無視
+  }
+}
+

@@ -79,11 +79,12 @@ export async function generateMetadata({
 
   const score = record?.final_valuation ?? 0;
   const status = record?.status ?? "deal_closed";
+  const idea = record?.idea_summary ?? "";
   const formattedScore = `¥${score.toLocaleString("ja-JP")}`;
 
   const ogImageUrl = `${baseUrl}/api/og?score=${encodeURIComponent(
     String(score)
-  )}&status=${encodeURIComponent(status)}`;
+  )}&status=${encodeURIComponent(status)}&idea=${encodeURIComponent(idea)}`;
 
   const title = record
     ? `${record.player_name}の査定結果: ${formattedScore} | TIGER PITCH`
@@ -169,7 +170,9 @@ export default async function ResultDetailPage({ params }: ResultPageProps) {
 
   const ogPreviewUrl = `/api/og?score=${encodeURIComponent(
     String(record.final_valuation)
-  )}&status=${encodeURIComponent(record.status)}`;
+  )}&status=${encodeURIComponent(record.status)}&idea=${encodeURIComponent(
+    record.idea_summary
+  )}`;
 
   return (
     <div className="bg-black min-h-screen text-gray-100">

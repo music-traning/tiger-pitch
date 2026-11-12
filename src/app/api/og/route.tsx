@@ -3,12 +3,25 @@ import { NextRequest } from "next/server";
 
 export const runtime = "edge";
 
+function truncateIdea(text: string, maxLength = 30): string {
+  const trimmed = text.trim();
+  if (!trimmed) return "次世代ビジネスプラン";
+  const chars = Array.from(trimmed);
+  if (chars.length <= maxLength) {
+    return trimmed;
+  }
+  return `${chars.slice(0, maxLength).join("")}...`;
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
 
   const rawScore = Number(searchParams.get("score") ?? "0");
   const score = Number.isNaN(rawScore) ? 0 : Math.max(0, Math.round(rawScore));
-  const status = searchParams.get("status") === "bankrupt" ? "bankrupt" : "deal_closed";
+  const status =
+    searchParams.get("status") === "bankrupt" ? "bankrupt" : "deal_closed";
+  const rawIdea = searchParams.get("idea") ?? "";
+  const displayIdea = truncateIdea(rawIdea, 30);
 
   const isBankrupt = status === "bankrupt";
   const formattedScore = `¥${score.toLocaleString("ja-JP")}`;
@@ -80,11 +93,11 @@ export async function GET(req: NextRequest) {
           </div>
         </div>
 
-        {/* 中央メインコンテンツ: 最終資金調達額 または メンタルブレイク表示 */}
+        {/* 中央メインコンテンツ: 対象アイデア & 最終資金調達額 / メンタルブレイク表示 */}
         <div
-          tw="flex flex-col items-center justify-center my-auto py-10 px-12 rounded-3xl z-10"
+          tw="flex flex-col items-center justify-center my-auto py-8 px-12 rounded-3xl z-10 w-full"
           style={{
-            backgroundColor: "rgba(3, 7, 18, 0.78)",
+            backgroundColor: "rgba(3, 7, 18, 0.82)",
             border: isBankrupt
               ? "2px solid rgba(239, 68, 68, 0.55)"
               : "2px solid rgba(34, 197, 94, 0.5)",
@@ -93,16 +106,32 @@ export async function GET(req: NextRequest) {
               : "0 0 60px rgba(34, 197, 94, 0.2)",
           }}
         >
+          {/* 対象アイデア表示ピル */}
+          <div
+            tw="flex items-center px-6 py-2.5 rounded-2xl mb-5 max-w-full"
+            style={{
+              backgroundColor: "rgba(17, 24, 39, 0.9)",
+              border: "1px solid rgba(75, 85, 99, 0.6)",
+            }}
+          >
+            <span tw="text-2xl font-bold text-blue-400 mr-2">
+              対象アイデア:
+            </span>
+            <span tw="text-2xl font-bold text-gray-100">
+              「{displayIdea}」
+            </span>
+          </div>
+
           {isBankrupt ? (
             <div tw="flex flex-col items-center">
               <span
-                tw="text-2xl font-bold tracking-widest mb-2"
+                tw="text-xl font-bold tracking-widest mb-1"
                 style={{ color: "#f87171" }}
               >
                 MENTAL HP DEPLETED (0%)
               </span>
               <div
-                tw="text-6xl font-black tracking-tight mb-4"
+                tw="text-6xl font-black tracking-tight mb-3"
                 style={{ color: "#ef4444" }}
               >
                 メンタルブレイク（破産）
@@ -113,10 +142,10 @@ export async function GET(req: NextRequest) {
             </div>
           ) : (
             <div tw="flex flex-col items-center">
-              <span tw="text-2xl font-bold tracking-widest text-gray-400 mb-3">
+              <span tw="text-xl font-bold tracking-widest text-gray-400 mb-1">
                 FINAL TOTAL VALUATION
               </span>
-              <div tw="text-4xl font-bold text-gray-200 mb-2">
+              <div tw="text-3xl font-bold text-gray-200 mb-1">
                 最終資金調達額:
               </div>
               <div

@@ -100,15 +100,15 @@ export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
             </p>
           </section>
 
-          {/* 4. 引き際の判断（撤退 / 成立） */}
+          {/* 4. ターン制限と引き際の判断（撤退 / 成立） */}
           <section className="space-y-1.5">
             <div className="flex items-center gap-1.5 font-bold text-amber-400 text-xs">
               <Handshake className="w-4 h-4" />
-              <span>4. 引き際の判断：「撤退 / 成立」ボタン</span>
+              <span>4. 全5ターン制限と引き際（「撤退 / 成立」）</span>
             </div>
             <p className="bg-gray-950/70 p-3 rounded-xl border border-gray-800">
-              画面左下の<strong className="text-amber-400">「撤退 / 成立」</strong>ボタンを押すと、その時点の総評価額でディールを確定させて安全に勝ち逃げできます。
-              もう1ターン粘って増額を狙うか、メンタルが尽きる前に手堅く確定させるかの駆け引きが勝負の鍵です！
+              交渉は<strong>最大5ターン</strong>まで！5ターン目の査定を生き残れば自動的にその金額でディール成立となります。
+              また、途中のターンでも画面左下の<strong className="text-amber-400">「撤退 / 成立」</strong>ボタンを押せば、その時点の総評価額で安全に勝ち逃げできます。
             </p>
           </section>
 
